@@ -1,8 +1,12 @@
 from pathlib import Path
 import os
 import cohere
-from lancedb.embeddings import get_registry
 import lancedb
+import time
+from lancedb.embeddings import get_registry
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Läser en Markdown-fil (.md) och returnerar innehållet som text
 def read_markdown_file(file_path: str) -> str:
@@ -138,5 +142,12 @@ def process_markdown_directory(directory_path: str):
         store_embeddings(chunks, embeddings)
 
         processed_files += 1
+        time.sleep(10)
 
     return processed_files
+
+# Startar bearbetningen av Markdown-filerna
+
+if __name__ == "__main__":
+    count = process_markdown_directory("src/data")
+    print(f"Antal bearbetade Markdown-filer: {count}")
