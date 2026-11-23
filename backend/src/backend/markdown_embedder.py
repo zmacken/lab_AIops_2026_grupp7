@@ -109,3 +109,34 @@ def search_similar_chunks(query: str, limit: int = 3):
     )
 
     return results
+
+# Läser alla Markdown-filer i en mapp och sparar deras embeddings
+def process_markdown_directory(directory_path: str):
+    directory = Path(directory_path)
+    
+    # Mappar som inte ska genomsökas
+    ignored_dirs = {".venv", ".git", "node_modules", "__pycache__"}
+
+    markdown_files = [
+        path for path in directory.rglob("*.md")
+        if not any(
+            part in ignored_dirs
+            for part in path.relative_to(directory).parts
+        )
+    ]
+
+    processed_files = 0
+
+    for file_path in markdown_files:
+        text = read_markdown_file(str(file_path))
+
+        if not text.strip():
+            continue
+
+        chunks = split_text_into_chunks(text)
+        embeddings = create_chunk_embeddings(chunks)
+        store_embeddings(chunks, embeddings)
+
+        processed_files += 1
+
+    return processed_files
