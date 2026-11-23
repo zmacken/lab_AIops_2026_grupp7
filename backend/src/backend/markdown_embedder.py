@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import cohere
+from lancedb.embeddings import get_registry
 
 # Läser en Markdown-fil (.md) och returnerar innehållet som text
 def read_markdown_file(file_path: str) -> str:
@@ -26,3 +27,9 @@ def create_embedding(text: str) -> list[float]:
     )
 
     return response.embeddings.float[0]
+
+# Skapar en Cohere-funktion som kan användas av LanceDB
+def get_cohere_embedding_function():
+    return get_registry().get("cohere").create(
+        name="embed-multilingual-v3.0"
+    )
