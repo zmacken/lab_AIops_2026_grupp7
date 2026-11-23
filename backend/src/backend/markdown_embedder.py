@@ -33,3 +33,10 @@ def get_cohere_embedding_function():
     return get_registry().get("cohere").create(
         name="embed-multilingual-v3.0"
     )
+
+# Delar upp text i mindre delar (chunks)
+def split_text_into_chunks(text: str, chunk_size: int = 1000) -> list[str]:
+    return [
+        text[i:i + chunk_size]
+        for i in range(0, len(text), chunk_size)
+    ]
