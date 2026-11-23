@@ -58,8 +58,14 @@ def process_markdown_file(file_path: str):
     return chunks, embeddings
 
 
-# Sparar text-chunks och deras embeddings i LanceDB
+# Spara text-chunks och deras embeddings i LanceDB
+# Undvika att lägga till samma text flera gånger
+
 def store_embeddings(chunks: list[str], embeddings: list[list[float]]):
+
+    if len(chunks) != len(embeddings):
+        raise ValueError("Antalet chunks och embeddings måste vara samma.")
+
     db = lancedb.connect("data/lancedb")
 
     data = [
@@ -69,8 +75,37 @@ def store_embeddings(chunks: list[str], embeddings: list[list[float]]):
 
     if "markdown_chunks" in db.table_names():
         table = db.open_table("markdown_chunks")
-        table.add(data)
+
+        existing_texts = set(
+            table.to_arrow().column("text").to_pylist()
+        )
+
+        new_data = [
+            item for item in data
+            if item["text"] not in existing_texts
+        ]
+
+        if new_data:
+            table.add(new_data)
+
     else:
         table = db.create_table("markdown_chunks", data=data)
 
     return table
+
+
+# Söker efter text-chunks som liknar användarens fråga
+def search_similar_chunks(query: str, limit: int = 3):
+    db = lancedb.connect("data/lancedb")
+    table = db.open_table("markdown_chunks")
+
+    fn = get_cohere_embedding_function()
+    query_embedding = fn.compute_query_embeddings(query)[0]
+
+    results = (
+        table.search(query_embedding)
+        .limit(limit)
+        .to_arrow()
+    )
+
+    return results
