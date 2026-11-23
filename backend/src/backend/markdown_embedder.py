@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import cohere
 from lancedb.embeddings import get_registry
+import lancedb
 
 # Läser en Markdown-fil (.md) och returnerar innehållet som text
 def read_markdown_file(file_path: str) -> str:
@@ -57,3 +58,19 @@ def process_markdown_file(file_path: str):
     return chunks, embeddings
 
 
+# Sparar text-chunks och deras embeddings i LanceDB
+def store_embeddings(chunks: list[str], embeddings: list[list[float]]):
+    db = lancedb.connect("data/lancedb")
+
+    data = [
+        {"text": chunk, "vector": embedding}
+        for chunk, embedding in zip(chunks, embeddings)
+    ]
+
+    if "markdown_chunks" in db.table_names():
+        table = db.open_table("markdown_chunks")
+        table.add(data)
+    else:
+        table = db.create_table("markdown_chunks", data=data)
+
+    return table
