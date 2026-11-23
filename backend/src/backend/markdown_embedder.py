@@ -46,3 +46,14 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000) -> list[str]:
 def create_chunk_embeddings(chunks: list[str]) -> list[list[float]]:
     fn = get_cohere_embedding_function()
     return fn.compute_source_embeddings(chunks)
+
+
+# Läser en Markdown-fil, delar upp texten och skapar embeddings
+def process_markdown_file(file_path: str):
+    text = read_markdown_file(file_path)
+    chunks = split_text_into_chunks(text)
+    embeddings = create_chunk_embeddings(chunks)
+
+    return chunks, embeddings
+
+
