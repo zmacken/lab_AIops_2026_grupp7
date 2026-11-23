@@ -40,3 +40,9 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000) -> list[str]:
         text[i:i + chunk_size]
         for i in range(0, len(text), chunk_size)
     ]
+
+
+# Skapar embeddings för flera chunks
+def create_chunk_embeddings(chunks: list[str]) -> list[list[float]]:
+    fn = get_cohere_embedding_function()
+    return fn.compute_source_embeddings(chunks)
