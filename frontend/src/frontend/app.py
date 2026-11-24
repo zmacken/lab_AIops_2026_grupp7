@@ -17,6 +17,10 @@ def main():
         "and emergency preparedness in Sweden"
     )
 
+    question = st.text_input(
+    "Write your question:"
+    )
+
 
 if __name__ == "__main__":
     main()
