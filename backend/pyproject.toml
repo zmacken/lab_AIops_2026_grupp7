@@ -13,7 +13,8 @@ dependencies = [
     "fastapi",
     "logfire",
     "logfire[fastapi]",
-    "cohere",]
+    "cohere",
+    "firecrawl-py",]
 
 [project.scripts]
 backend = "backend:main"
