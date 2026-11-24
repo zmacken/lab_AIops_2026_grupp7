@@ -18,8 +18,15 @@ def main():
     )
 
     question = st.text_input(
-    "Write your question:"
+        "Write your question:"
     )
+    
+    if st.button("Send"):
+        if question.strip():
+            st.write("Your question:")
+            st.write(question)
+        else:
+            st.warning("Please enter a question.")
 
 
 if __name__ == "__main__":
