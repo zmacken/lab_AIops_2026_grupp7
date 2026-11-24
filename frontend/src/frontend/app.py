@@ -30,13 +30,14 @@ def main():
 
             data = response.json()
 
-            st.write("Your question:")
+            st.subheader("Your question:")
             st.write(question)
 
-            st.write("Answer:")
-            #st.write(data["answer"])
-            st.write("Backend status:", response.status_code)
-            st.json(data)
+            st.subheader("Answer:")
+            for source in data["sources"]:
+                st.markdown(
+                    f"[{source['title']}]({source['url']})"
+                )
         else:
             st.warning("Please enter a question.")
 
