@@ -20,7 +20,7 @@ def retrieve_top_document(query: str) -> str:
     """
     vector search to match closest document to the query
     """
-    results = vector_db["articles"].search(query=query).to_list() #byt från articles till rätt name på tabellen som innehåller dina dokument
+    results = vector_db["mcf_chunks"].search(query=query).to_list() #byt från articles till rätt name på tabellen som innehåller dina dokument
 
     return f"""
     
