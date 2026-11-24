@@ -8,6 +8,5 @@ dependencies = ["ipykernel"]
 
 [tool.uv.workspace]
 members = [
-    "backend/backend",
-    "frontend/frontend",
+    "backend", "frontend"
 ]
