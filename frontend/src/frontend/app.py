@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import os
 
-BASE_URL = os.getenv("API_URL", default="http://localhost:8000")
+BASE_URL = os.getenv("API_URL", default="http://localhost:8001")
 
 def main():
     st.set_page_config(
@@ -23,8 +23,20 @@ def main():
     
     if st.button("Send"):
         if question.strip():
+            response = requests.post(
+                f"{BASE_URL}/chat",
+                json={"prompt": question}
+            )
+
+            data = response.json()
+
             st.write("Your question:")
             st.write(question)
+
+            st.write("Answer:")
+            #st.write(data["answer"])
+            st.write("Backend status:", response.status_code)
+            st.json(data)
         else:
             st.warning("Please enter a question.")
 
