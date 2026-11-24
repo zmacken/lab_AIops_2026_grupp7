@@ -23,7 +23,6 @@ crawl_result = app.crawl(
     "https://www.mcf.se/sv/rad-till-privatpersoner/",
     sitemap="include",
     crawl_entire_domain=False,
-    limit=45,  # Max antal sidor
     scrape_options=scrape_opts,
 )
 
