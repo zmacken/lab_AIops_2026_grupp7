@@ -7,14 +7,17 @@ authors = [
     { name = "Hannah Zemack", email = "hannah.zemack@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = [    
+dependencies = [
     "pydantic-ai",
     "lancedb",
     "fastapi",
     "logfire",
     "logfire[fastapi]",
     "cohere",
-    "firecrawl-py",]
+    "firecrawl-py",
+    "pandas>=3.1.1",
+]
+
 
 [project.scripts]
 backend = "backend:main"
