@@ -1,153 +1,129 @@
-from pathlib import Path
-import os
-import cohere
+import re
+
 import lancedb
-import time
-from lancedb.embeddings import get_registry
 from dotenv import load_dotenv
+from lancedb.embeddings import get_registry
+from lancedb.pydantic import LanceModel, Vector
+
+from backend.constants import TABLE_NAME, VECTOR_DATABASE_PATH
 
 load_dotenv()
 
-# Läser en Markdown-fil (.md) och returnerar innehållet som text
-def read_markdown_file(file_path: str) -> str:
-    """Read a Markdown file and return its text content."""
-    path = Path(file_path)
-    return path.read_text(encoding="utf-8")
+embedding_model = get_registry().get("cohere").create(name="embed-multilingual-v3.0")
+
+MAX_CHARS = 1500
+MIN_CHARS = 80
+
+SKIP_URLS = {"https://www.mcf.se/sv/rad-till-privatpersoner/"}
 
 
-# Skapar en embedding av text med Cohere
-def create_embedding(text: str) -> list[float]:
-    api_key = os.getenv("COHERE_API_KEY")
-
-    if not api_key:
-        raise ValueError("COHERE_API_KEY saknas")
-
-    client = cohere.ClientV2(api_key=api_key)
-
-    response = client.embed(
-        texts=[text],
-        model="embed-multilingual-v3.0",
-        input_type="search_document",
-        embedding_types=["float"],
-    )
-
-    return response.embeddings.float[0]
-
-# Skapar en Cohere-funktion som kan användas av LanceDB
-def get_cohere_embedding_function():
-    return get_registry().get("cohere").create(
-        name="embed-multilingual-v3.0"
-    )
-
-# Delar upp text i mindre delar (chunks)
-def split_text_into_chunks(text: str, chunk_size: int = 1000) -> list[str]:
-    return [
-        text[i:i + chunk_size]
-        for i in range(0, len(text), chunk_size)
-    ]
+class Chunk(LanceModel):
+    doc_id: str
+    title: str
+    url: str
+    heading: str
+    content: str = embedding_model.SourceField()
+    embedding: Vector(embedding_model.ndims()) = embedding_model.VectorField()
 
 
-# Skapar embeddings för flera chunks
-def create_chunk_embeddings(chunks: list[str]) -> list[list[float]]:
-    fn = get_cohere_embedding_function()
-    return fn.compute_source_embeddings(chunks)
+def parse_markdown(text: str) -> tuple[dict, str]:
+    """Split the file into frontmatter (title, source) and the body text."""
+    meta = {}
+    match = re.match(r"^---\n(.*?)\n---\n", text, flags=re.DOTALL)
+    if match:
+        for line in match.group(1).splitlines():
+            key, _, value = line.partition(":")
+            meta[key.strip()] = value.strip()
+        text = text[match.end() :]
+    return meta, text
 
 
-# Läser en Markdown-fil, delar upp texten och skapar embeddings
-def process_markdown_file(file_path: str):
-    text = read_markdown_file(file_path)
-    chunks = split_text_into_chunks(text)
-    embeddings = create_chunk_embeddings(chunks)
+def clean_markdown(text: str) -> str:
+    """Remove boilerplate that appears on every MCF page but is not content."""
+    text = text.replace("­", "")  # remove invisible soft hyphens
 
-    return chunks, embeddings
-
-
-# Spara text-chunks och deras embeddings i LanceDB
-# Undvika att lägga till samma text flera gånger
-
-def store_embeddings(chunks: list[str], embeddings: list[list[float]]):
-
-    if len(chunks) != len(embeddings):
-        raise ValueError("Antalet chunks och embeddings måste vara samma.")
-
-    db = lancedb.connect("data/lancedb")
-
-    data = [
-        {"text": chunk, "vector": embedding}
-        for chunk, embedding in zip(chunks, embeddings)
-    ]
-
-    if "markdown_chunks" in db.table_names():
-        table = db.open_table("markdown_chunks")
-
-        existing_texts = set(
-            table.to_arrow().column("text").to_pylist()
-        )
-
-        new_data = [
-            item for item in data
-            if item["text"] not in existing_texts
-        ]
-
-        if new_data:
-            table.add(new_data)
-
-    else:
-        table = db.create_table("markdown_chunks", data=data)
-
-    return table
-
-
-# Söker efter text-chunks som liknar användarens fråga
-def search_similar_chunks(query: str, limit: int = 3):
-    db = lancedb.connect("data/lancedb")
-    table = db.open_table("markdown_chunks")
-
-    fn = get_cohere_embedding_function()
-    query_embedding = fn.compute_query_embeddings(query)[0]
-
-    results = (
-        table.search(query_embedding)
-        .limit(limit)
-        .to_arrow()
-    )
-
-    return results
-
-# Läser alla Markdown-filer i en mapp och sparar deras embeddings
-def process_markdown_directory(directory_path: str):
-    directory = Path(directory_path)
-    
-    # Mappar som inte ska genomsökas
-    ignored_dirs = {".venv", ".git", "node_modules", "__pycache__"}
-
-    markdown_files = [
-        path for path in directory.rglob("*.md")
-        if not any(
-            part in ignored_dirs
-            for part in path.relative_to(directory).parts
-        )
-    ]
-
-    processed_files = 0
-
-    for file_path in markdown_files:
-        text = read_markdown_file(str(file_path))
-
-        if not text.strip():
+    lines = []
+    skip_toc = False
+    for line in text.splitlines():
+        if line.startswith("[Till innehåll på sidan]") or line.startswith("[Lyssna]("):
+            continue
+        if line.strip() == "Visa större bild":
             continue
 
-        chunks = split_text_into_chunks(text)
-        embeddings = create_chunk_embeddings(chunks)
-        store_embeddings(chunks, embeddings)
+        if line.strip() == "## På den här sidan":
+            skip_toc = True
+            continue
+        if skip_toc:
+            if line.startswith("#"):
+                skip_toc = False
+            else:
+                continue
+        lines.append(line)
 
-        processed_files += 1
-        time.sleep(10)
+    text = "\n".join(lines)
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)  # remove images ![alt](url)
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)  # [text](url) -> text
+    text = re.sub(r"\n{3,}", "\n\n", text)  # at most one blank line in a row
+    return text.strip()
 
-    return processed_files
 
-# Startar bearbetningen av Markdown-filerna
+def split_long_section(text: str, max_chars: int = MAX_CHARS) -> list[str]:
+    """Split a long section at paragraphs (blank lines) so no sentence is cut.
+    A paragraph that is too long on its own (e.g. a long bullet list) is split per line."""
+    pieces = []
+    for paragraph in text.split("\n\n"):
+        pieces += paragraph.splitlines() if len(paragraph) > max_chars else [paragraph]
 
-if __name__ == "__main__":
-    count = process_markdown_directory("src/data")
-    print(f"Antal bearbetade Markdown-filer: {count}")
+    parts, current = [], ""
+    for piece in pieces:
+        if current and len(current) + len(piece) > max_chars:
+            parts.append(current.strip())
+            current = ""
+        current += piece + "\n\n"
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def split_into_chunks(text: str, title: str) -> list[dict]:
+    """Split the text at every ## heading. Each chunk starts with the page title
+    and the heading, so the search knows what the chunk is about."""
+    sections = re.split(r"\n(?=## )", "\n" + text)
+    chunks = []
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        first_line = section.splitlines()[0]
+        heading = (
+            first_line.lstrip("#").strip() if first_line.startswith("#") else title
+        )
+
+        for part in split_long_section(section):
+            if len(part) < MIN_CHARS:
+                continue
+            content = part if heading == title else f"{title} – {heading}\n\n{part}"
+            chunks.append({"heading": heading, "content": content})
+    return chunks
+
+
+def file_to_chunks(file) -> list[dict]:
+    """Read a markdown file and return ready-made rows for the Chunk table."""
+    meta, body = parse_markdown(file.read_text(encoding="utf-8"))
+    url = meta.get("source", "")
+    title = meta.get("title", file.stem)
+    if not url or url in SKIP_URLS:
+        return []
+
+    return [
+        {"doc_id": url, "title": title, "url": url, **chunk}
+        for chunk in split_into_chunks(clean_markdown(body), title)
+    ]
+
+
+def search_similar_chunks(query: str, limit: int = 3) -> list[dict]:
+    """Return the chunks most similar to the query. LanceDB embeds the query
+    automatically with the same Cohere model that was used during ingestion."""
+    vector_db = lancedb.connect(uri=VECTOR_DATABASE_PATH)
+    table = vector_db[TABLE_NAME]
+    return table.search(query).limit(limit).to_list()

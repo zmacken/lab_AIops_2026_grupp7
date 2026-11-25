@@ -1,5 +1,5 @@
 from fastapi import FastAPI                                  
-from backend.model import Prompt, RagResponse, Source  
+from backend.data_models import Prompt, RagResponse, Source  
 
 app = FastAPI()
 
